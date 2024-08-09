@@ -91,7 +91,7 @@ func parseIncludedConfig(ctx *ParsingContext, includedConfig *IncludeConfig) (*T
 		return PartialParseConfigFile(ctx, includePath, includedConfig)
 	}
 
-	return ParseConfigFile(ctx.TerragruntOptions, ctx, includePath, includedConfig)
+	return ParseConfigFile(ctx, includePath, includedConfig)
 }
 
 // handleInclude merges the included config into the current config depending on the merge strategy specified by the
@@ -241,6 +241,10 @@ func (targetConfig *TerragruntConfig) Merge(sourceConfig *TerragruntConfig, terr
 		targetConfig.TerragruntVersionConstraint = sourceConfig.TerragruntVersionConstraint
 	}
 
+	if sourceConfig.Engine != nil {
+		targetConfig.Engine = sourceConfig.Engine.Clone()
+	}
+
 	// Skip has to be set specifically in each file that should be skipped
 	targetConfig.Skip = sourceConfig.Skip
 
@@ -353,6 +357,13 @@ func (targetConfig *TerragruntConfig) DeepMerge(sourceConfig *TerragruntConfig, 
 		targetConfig.TerragruntVersionConstraint = sourceConfig.TerragruntVersionConstraint
 	}
 
+	if sourceConfig.Engine != nil {
+		if targetConfig.Engine == nil {
+			targetConfig.Engine = &EngineConfig{}
+		}
+		targetConfig.Engine.Merge(sourceConfig.Engine)
+	}
+
 	// Skip has to be set specifically in each file that should be skipped
 	targetConfig.Skip = sourceConfig.Skip
 
@@ -457,7 +468,7 @@ func fetchDependencyPaths(config *TerragruntConfig) map[string]string {
 		return m
 	}
 	for _, dependency := range config.TerragruntDependencies {
-		m[dependency.Name] = dependency.ConfigPath
+		m[dependency.Name] = dependency.ConfigPath.AsString()
 	}
 	return m
 }
@@ -565,7 +576,6 @@ func mergeInputs(childInputs map[string]interface{}, parentInputs map[string]int
 	for key, value := range childInputs {
 		out[key] = value
 	}
-
 	return out
 }
 
@@ -830,8 +840,8 @@ func jsonIsIncludeBlock(jsonData interface{}) bool {
 // copyFieldsMetadata Copy fields metadata between TerragruntConfig instances.
 func copyFieldsMetadata(sourceConfig *TerragruntConfig, targetConfig *TerragruntConfig) {
 
-	fieldsCopyLocks.Lock(targetConfig.String())
-	defer fieldsCopyLocks.Unlock(targetConfig.String())
+	fieldsCopyLocks.Lock(targetConfig.DownloadDir)
+	defer fieldsCopyLocks.Unlock(targetConfig.DownloadDir)
 
 	if sourceConfig.FieldsMetadata != nil {
 		if targetConfig.FieldsMetadata == nil {
